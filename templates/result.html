@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><title>Weather Result</title></head>
+<body>
+  {% if error %}
+    <h2 style="color:red">{{ error }}</h2>
+  {% else %}
+    <h1>Weather in {{ location }}</h1>
+    <h3>Current Weather</h3>
+    <p>Temperature: {{ current.main.temp }} °C</p>
+    <p>Condition: {{ current.weather[0].description }}</p>
+    <img src="http://openweathermap.org/img/wn/{{ current.weather[0].icon }}@2x.png" alt="icon">
+
+    <h3>5-Day Forecast</h3>
+    <ul>
+      {% for item in forecast %}
+        <li>
+          {{ item.dt_txt }} - {{ item.main.temp }} °C - {{ item.weather[0].description }}
+          <img src="http://openweathermap.org/img/wn/{{ item.weather[0].icon }}@2x.png" alt="icon" style="vertical-align: middle">
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <a href="/">Back</a>
+</body>
+</html>
