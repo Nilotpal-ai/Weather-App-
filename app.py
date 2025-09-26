@@ -20,6 +20,10 @@ class LocationInput(BaseModel):
 
 
 async def geocode_location(location: str):
+    if not location or not location.strip():
+        print("[DEBUG] Empty location string")
+        return None
+
     url = "http://api.openweathermap.org/geo/1.0/direct"
     params = {"q": location.strip(), "limit": 1, "appid": OPENWEATHER_API_KEY}
 
@@ -28,16 +32,20 @@ async def geocode_location(location: str):
             resp = await client.get(url, params=params, timeout=10.0)
             resp.raise_for_status()
             data = await resp.json()
-            print(f"[DEBUG] Geocode response for {location}: {data}")  # log
+            print(f"[DEBUG] Geocode response for {location}: {data}")
         except Exception as e:
             print(f"[Geocoding Error] {e}, response={resp.text[:200]}")
             return None
 
-        if not data:  # empty list
+        if not data or len(data) == 0:
+            print(f"[DEBUG] No results for {location}")
             return None
 
-        first = data[0]  # ✅ take the first item
-        return float(first["lat"]), float(first["lon"])
+        first = data[0]  # ✅ take first element from the list
+        lat, lon = float(first["lat"]), float(first["lon"])
+        print(f"[DEBUG] Parsed coords for {location}: {lat}, {lon}")
+        return lat, lon
+
 
 
 
@@ -194,6 +202,7 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
 
 
