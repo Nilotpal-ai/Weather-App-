@@ -19,15 +19,6 @@ class LocationInput(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-async def test_geocode():
-    url = "https://api.openweathermap.org/geo/1.0/direct"
-    params = {"q": "London", "limit": 1, "appid": "YOUR_API_KEY"}
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, params=params)
-        print(await resp.text())
-
-asyncio.run(test_geocode())
-
 async def geocode_location(location: str):
     if not location or not location.strip():
         print("[DEBUG] Empty location string")
@@ -219,6 +210,7 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
 
 
