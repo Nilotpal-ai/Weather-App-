@@ -5,7 +5,6 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional
 from math import radians, cos, sin, sqrt, atan2
-import asyncio
 
 
 app = FastAPI()
@@ -24,23 +23,22 @@ async def geocode_location(location: str):
         print("[DEBUG] Empty location string")
         return None
 
-    url = "https://api.openweathermap.org/geo/1.0/direct"
-    params = {"q": location.strip(), "limit": 1, "appid": OPENWEATHER_API_KEY}
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {"q": location.strip(), "format": "json", "limit": 1}
+    headers = {"User-Agent": "YourAppName/1.0 (your-email@example.com)"}  # Required by Nominatim usage policy
 
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.get(url, params=params, timeout=10.0)
+            resp = await client.get(url, params=params, headers=headers, timeout=10.0)
             resp.raise_for_status()
-            text = await resp.text()
-            print(f"[DEBUG] Geocode raw response text: {text}")
             data = await resp.json()
-            print(f"[DEBUG] Geocode parsed JSON: {data}")
+            print(f"[DEBUG] Nominatim geocode response for {location}: {data}")
         except Exception as e:
             print(f"[Geocoding Error] {e}")
             return None
 
-        if not data or len(data) == 0:
-            print(f"[DEBUG] No geocode results for '{location}'")
+        if not data:
+            print(f"[DEBUG] No Nominatim results for '{location}'")
             return None
 
         first = data[0]
@@ -48,7 +46,7 @@ async def geocode_location(location: str):
             lat = float(first["lat"])
             lon = float(first["lon"])
         except (KeyError, ValueError) as e:
-            print(f"[DEBUG] Error parsing lat/lon from geocode result: {e}")
+            print(f"[DEBUG] Error parsing lat/lon from Nominatim result: {e}")
             return None
 
         print(f"[DEBUG] Found coordinates for '{location}': {lat}, {lon}")
@@ -210,6 +208,7 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
 
 
