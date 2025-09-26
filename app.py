@@ -21,20 +21,24 @@ class LocationInput(BaseModel):
 
 async def geocode_location(location: str):
     url = "http://api.openweathermap.org/geo/1.0/direct"
-    params = {"q": location, "limit": 1, "appid": OPENWEATHER_API_KEY}
+    params = {"q": location.strip(), "limit": 1, "appid": OPENWEATHER_API_KEY}
 
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(url, params=params, timeout=10.0)
             resp.raise_for_status()
             data = await resp.json()
+            print(f"[DEBUG] Geocode response for {location}: {data}")  # log
         except Exception as e:
             print(f"[Geocoding Error] {e}, response={resp.text[:200]}")
             return None
 
-        if not data:
+        if not data:  # empty list
             return None
-        return float(data[0]["lat"]), float(data[0]["lon"])
+
+        first = data[0]  # ✅ take the first item
+        return float(first["lat"]), float(first["lon"])
+
 
 
 
@@ -190,6 +194,7 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
 
 
