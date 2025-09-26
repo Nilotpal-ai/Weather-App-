@@ -24,7 +24,7 @@ async def geocode_location(location: str):
         print("[DEBUG] Empty location string")
         return None
 
-    url = "http://api.openweathermap.org/geo/1.0/direct"
+    url = "https://api.openweathermap.org/geo/1.0/direct"
     params = {"q": location.strip(), "limit": 1, "appid": OPENWEATHER_API_KEY}
 
     async with httpx.AsyncClient() as client:
@@ -41,11 +41,10 @@ async def geocode_location(location: str):
             print(f"[DEBUG] No results for {location}")
             return None
 
-        first = data[0]  # ✅ take first element from the list
+        first = data[0]
         lat, lon = float(first["lat"]), float(first["lon"])
         print(f"[DEBUG] Parsed coords for {location}: {lat}, {lon}")
         return lat, lon
-
 
 
 
@@ -202,6 +201,7 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
 
 
