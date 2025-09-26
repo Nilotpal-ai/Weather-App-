@@ -102,83 +102,71 @@ async def form_post(
     latitude: Optional[str] = Form(None),
     longitude: Optional[str] = Form(None),
 ):
+    # Convert latitude and longitude strings to floats if possible
     try:
-        # Convert latitude and longitude strings to floats if possible
-        try:
-            lat_input = float(latitude) if latitude and latitude.strip() != "" else None
-            lon_input = float(longitude) if longitude and longitude.strip() != "" else None
-        except ValueError:
-            return templates.TemplateResponse(
-                "result.html",
-                {"request": request, "error": "Invalid latitude or longitude format"},
-            )
-
-        # Case 1: both location and coordinates given
-        if location and (lat_input is not None and lon_input is not None):
-            coords = await geocode_location(location)
-            if not coords:
-                return templates.TemplateResponse(
-                    "result.html", {"request": request, "error": "Location not found"}
-                )
-            lat_loc, lon_loc = coords
-
-            # Distance check between geocoded and provided coords
-            dist_km = haversine(lat_loc, lon_loc, lat_input, lon_input)
-            if dist_km > 50:
-                return templates.TemplateResponse(
-                    "result.html",
-                    {
-                        "request": request,
-                        "error": "Location name and coordinates do not match",
-                    },
-                )
-            lat, lon = lat_loc, lon_loc
-
-        # Case 2: only coordinates
-        elif lat_input is not None and lon_input is not None:
-            lat, lon = lat_input, lon_input
-
-        # Case 3: only location
-        elif location:
-            coords = await geocode_location(location)
-            if not coords:
-                return templates.TemplateResponse(
-                    "result.html", {"request": request, "error": "Location not found"}
-                )
-            lat, lon = coords
-
-        # Case 4: nothing provided
-        else:
-            return templates.TemplateResponse(
-                "result.html",
-                {"request": request, "error": "No location or coordinates provided"},
-            )
-
-        # Fetch weather
-        weather, forecast = await fetch_weather(lat, lon)
-
-        if weather.get("cod") != 200 or forecast.get("cod") != "200":
-            error_msg = weather.get("message", "Weather API error")
-            return templates.TemplateResponse(
-                "result.html", {"request": request, "error": error_msg}
-            )
-
-        location_display = location if location else f"{lat}, {lon}"
-
+        lat_input = float(latitude) if latitude and latitude.strip() != "" else None
+        lon_input = float(longitude) if longitude and longitude.strip() != "" else None
+    except ValueError:
         return templates.TemplateResponse(
             "result.html",
-            {
-                "request": request,
-                "location": location_display,
-                "current": weather,
-                "forecast": forecast.get("list", []),
-                "error": None,
-            },
+            {"request": request, "error": "Invalid latitude or longitude format"},
         )
 
-    except Exception as e:
-        # Catch-all for debugging in Render
+    if location and (lat_input is not None and lon_input is not None):
+        # Geocode location to get its coordinates
+        coords = await geocode_location(location)
+        if not coords:
+            return templates.TemplateResponse(
+                "result.html", {"request": request, "error": "Location not found"}
+            )
+        lat_loc, lon_loc = coords
+
+        # Calculate distance between geocoded location and input coordinates
+        dist_km = haversine(lat_loc, lon_loc, lat_input, lon_input)
+        # Define a threshold (e.g. 50 km) for matching locations
+        if dist_km > 50:
+            return templates.TemplateResponse(
+                "result.html",
+                {"request": request, "error": "Location name and coordinates do not match"},
+            )
+        # Use geocoded coordinates for weather fetching
+        lat, lon = lat_loc, lon_loc
+
+    elif lat_input is not None and lon_input is not None:
+        # Only coordinates given
+        lat, lon = lat_input, lon_input
+
+    elif location:
+        # Only location name given
+        coords = await geocode_location(location)
+        if not coords:
+            return templates.TemplateResponse(
+                "result.html", {"request": request, "error": "Location not found"}
+            )
+        lat, lon = coords
+
+    else:
         return templates.TemplateResponse(
-            "result.html",
-            {"request": request, "error": f"Unexpected error: {str(e)}"},
+            "result.html", {"request": request, "error": "No location or coordinates provided"}
         )
+
+    weather, forecast = await fetch_weather(lat, lon)
+
+    if weather.get("cod") != 200 or forecast.get("cod") != "200":
+        error_msg = weather.get("message", "API Error")
+        return templates.TemplateResponse(
+            "result.html", {"request": request, "error": error_msg}
+        )
+
+    location_display = location if location else f"{lat}, {lon}"
+
+    return templates.TemplateResponse(
+        "result.html",
+        {
+            "request": request,
+            "location": location_display,
+            "current": weather,
+            "forecast": forecast.get("list", []),
+            "error": None,
+        },
+    )
