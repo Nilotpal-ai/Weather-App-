@@ -31,20 +31,29 @@ async def geocode_location(location: str):
         try:
             resp = await client.get(url, params=params, timeout=10.0)
             resp.raise_for_status()
+            text = await resp.text()
+            print(f"[DEBUG] Geocode raw response text: {text}")
             data = await resp.json()
-            print(f"[DEBUG] Geocode response for {location}: {data}")
+            print(f"[DEBUG] Geocode parsed JSON: {data}")
         except Exception as e:
-            print(f"[Geocoding Error] {e}, response={resp.text[:200]}")
+            print(f"[Geocoding Error] {e}")
             return None
 
         if not data or len(data) == 0:
-            print(f"[DEBUG] No results for {location}")
+            print(f"[DEBUG] No geocode results for '{location}'")
             return None
 
         first = data[0]
-        lat, lon = float(first["lat"]), float(first["lon"])
-        print(f"[DEBUG] Parsed coords for {location}: {lat}, {lon}")
+        try:
+            lat = float(first["lat"])
+            lon = float(first["lon"])
+        except (KeyError, ValueError) as e:
+            print(f"[DEBUG] Error parsing lat/lon from geocode result: {e}")
+            return None
+
+        print(f"[DEBUG] Found coordinates for '{location}': {lat}, {lon}")
         return lat, lon
+
 
 
 
@@ -201,6 +210,7 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
 
 
