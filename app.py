@@ -18,6 +18,15 @@ class LocationInput(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
+@app.get("/test-geocode/{location}")
+async def test_geocode(location: str):
+    coords = await geocode_location(location)
+    if coords:
+        return {"location": location, "coordinates": coords}
+    else:
+        return {"error": "Location not found"}
+
+
 async def geocode_location(location: str):
     if not location or not location.strip():
         print("[DEBUG] Empty location string")
@@ -208,6 +217,7 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
 
 
