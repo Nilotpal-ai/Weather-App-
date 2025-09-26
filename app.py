@@ -18,51 +18,16 @@ class LocationInput(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-@app.get("/test-geocode/{location}")
-async def test_geocode(location: str):
-    coords = await geocode_location(location)
-    if coords:
-        return {"location": location, "coordinates": coords}
-    else:
-        return {"error": "Location not found"}
-
 
 async def geocode_location(location: str):
-    if not location or not location.strip():
-        print("[DEBUG] Empty location string")
-        return None
-
     url = "https://nominatim.openstreetmap.org/search"
-    params = {"q": location.strip(), "format": "json", "limit": 1}
-    headers = {"User-Agent": "YourAppName/1.0 (your-email@example.com)"}  # Required by Nominatim usage policy
-
+    params = {"q": location, "format": "json", "limit": 1}
     async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.get(url, params=params, headers=headers, timeout=10.0)
-            resp.raise_for_status()
-            data = await resp.json()
-            print(f"[DEBUG] Nominatim geocode response for {location}: {data}")
-        except Exception as e:
-            print(f"[Geocoding Error] {e}")
-            return None
-
+        resp = await client.get(url, params=params)
+        data = resp.json()
         if not data:
-            print(f"[DEBUG] No Nominatim results for '{location}'")
             return None
-
-        first = data[0]
-        try:
-            lat = float(first["lat"])
-            lon = float(first["lon"])
-        except (KeyError, ValueError) as e:
-            print(f"[DEBUG] Error parsing lat/lon from Nominatim result: {e}")
-            return None
-
-        print(f"[DEBUG] Found coordinates for '{location}': {lat}, {lon}")
-        return lat, lon
-
-
-
+        return float(data[0]["lat"]), float(data[0]["lon"])
 
 
 async def fetch_weather(lat, lon):
@@ -217,14 +182,3 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
-
-
-
-
-
-
-
-
-
-
-
