@@ -22,9 +22,20 @@ class LocationInput(BaseModel):
 async def geocode_location(location: str):
     url = "https://nominatim.openstreetmap.org/search"
     params = {"q": location, "format": "json", "limit": 1}
+    headers = {"User-Agent": "weather-app/1.0 (your_email@example.com)"}  # REQUIRED
+
     async with httpx.AsyncClient() as client:
-        resp = await client.get(url, params=params)
-        data = resp.json()
+        try:
+            resp = await client.get(url, params=params, headers=headers, timeout=10.0)
+            resp.raise_for_status()  # raise error for non-200
+            text = resp.text  # get raw response for debugging
+            if not text.strip():
+                return None  # empty response
+            data = await resp.json()
+        except Exception as e:
+            print(f"[Geocoding Error] {e}, response={resp.text[:200]}")  # log first 200 chars
+            return None
+
         if not data:
             return None
         return float(data[0]["lat"]), float(data[0]["lon"])
@@ -182,4 +193,5 @@ async def form_post(
             "result.html",
             {"request": request, "error": f"Unexpected error: {str(e)}"},
         )
+
 
