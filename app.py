@@ -5,42 +5,60 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional
 from math import radians, cos, sin, sqrt, atan2
-
+import asyncio
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 OPENWEATHER_API_KEY = "f33a92d1f423e75d96185317f09987f7"  # Replace with your key
 
-
 class LocationInput(BaseModel):
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-
 async def geocode_location(location: str):
+    """Geocode location with better error handling and timeout"""
     url = "https://nominatim.openstreetmap.org/search"
     params = {"q": location, "format": "json", "limit": 1}
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, params=params)
-        data = resp.json()
-        if not data:
-            return None
-        return float(data[0]["lat"]), float(data[0]["lon"])
-
+    
+    # Add proper headers to respect Nominatim's usage policy
+    headers = {
+        "User-Agent": "WeatherApp/1.0 (your-email@example.com)",  # Replace with your email
+        "Accept": "application/json"
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            resp.raise_for_status()  # Raises an exception for bad status codes
+            data = resp.json()
+            if not data:
+                return None
+            return float(data[0]["lat"]), float(data[0]["lon"])
+    except (httpx.RequestError, httpx.HTTPStatusError, KeyError, ValueError) as e:
+        print(f"Geocoding error for '{location}': {e}")
+        return None
 
 async def fetch_weather(lat, lon):
+    """Fetch weather data with error handling"""
     weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&units=metric&appid={OPENWEATHER_API_KEY}"
     forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&units=metric&appid={OPENWEATHER_API_KEY}"
-    async with httpx.AsyncClient() as client:
-        weather_res = await client.get(weather_url)
-        forecast_res = await client.get(forecast_url)
-        return weather_res.json(), forecast_res.json()
-
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            weather_res = await client.get(weather_url)
+            forecast_res = await client.get(forecast_url)
+            
+            weather_res.raise_for_status()
+            forecast_res.raise_for_status()
+            
+            return weather_res.json(), forecast_res.json()
+    except httpx.RequestError as e:
+        print(f"Weather API error: {e}")
+        return None, None
 
 def haversine(lat1, lon1, lat2, lon2):
-    # Calculate distance in kilometers between two lat/lon points
     R = 6371  # Earth radius in km
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
@@ -48,23 +66,23 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
 
-
 @app.post("/weather")
 async def get_weather(loc: LocationInput):
-    # Resolve coordinates
     if loc.latitude is not None and loc.longitude is not None:
         lat, lon = loc.latitude, loc.longitude
     elif loc.location:
         coords = await geocode_location(loc.location)
         if coords is None:
-            return JSONResponse({"error": "Location not found"}, status_code=404)
+            return JSONResponse({"error": "Location not found or geocoding service unavailable"}, status_code=404)
         lat, lon = coords
     else:
         return JSONResponse({"error": "No location provided"}, status_code=400)
 
     weather, forecast = await fetch_weather(lat, lon)
+    
+    if weather is None or forecast is None:
+        return JSONResponse({"error": "Weather service unavailable"}, status_code=503)
 
-    # Validate API response
     if weather.get("cod") != 200:
         return JSONResponse({"error": weather.get("message", "Weather API error")}, status_code=404)
     if forecast.get("cod") != "200":
@@ -89,11 +107,9 @@ async def get_weather(loc: LocationInput):
         ],
     }
 
-
 @app.get("/", response_class=HTMLResponse)
 async def form_get(request: Request):
     return templates.TemplateResponse("form.html", {"request": request})
-
 
 @app.post("/weather-html", response_class=HTMLResponse)
 async def form_post(
@@ -102,7 +118,6 @@ async def form_post(
     latitude: Optional[str] = Form(None),
     longitude: Optional[str] = Form(None),
 ):
-    # Convert latitude and longitude strings to floats if possible
     try:
         lat_input = float(latitude) if latitude and latitude.strip() != "" else None
         lon_input = float(longitude) if longitude and longitude.strip() != "" else None
@@ -112,53 +127,52 @@ async def form_post(
             {"request": request, "error": "Invalid latitude or longitude format"},
         )
 
+    # Determine which method to use for getting coordinates
     if location and (lat_input is not None and lon_input is not None):
-        # Geocode location to get its coordinates
+        # Both provided - verify they match
         coords = await geocode_location(location)
         if not coords:
             return templates.TemplateResponse(
-                "result.html", {"request": request, "error": "Location not found"}
+                "result.html", {"request": request, "error": "Location not found or geocoding service unavailable"}
             )
         lat_loc, lon_loc = coords
-
-        # Calculate distance between geocoded location and input coordinates
         dist_km = haversine(lat_loc, lon_loc, lat_input, lon_input)
-        # Define a threshold (e.g. 50 km) for matching locations
         if dist_km > 50:
             return templates.TemplateResponse(
                 "result.html",
                 {"request": request, "error": "Location name and coordinates do not match"},
             )
-        # Use geocoded coordinates for weather fetching
         lat, lon = lat_loc, lon_loc
-
     elif lat_input is not None and lon_input is not None:
-        # Only coordinates given
+        # Only coordinates
         lat, lon = lat_input, lon_input
-
     elif location:
-        # Only location name given
+        # Only location name
         coords = await geocode_location(location)
         if not coords:
             return templates.TemplateResponse(
-                "result.html", {"request": request, "error": "Location not found"}
+                "result.html", {"request": request, "error": "Location not found or geocoding service unavailable. Try using coordinates instead."}
             )
         lat, lon = coords
-
     else:
         return templates.TemplateResponse(
             "result.html", {"request": request, "error": "No location or coordinates provided"}
         )
 
     weather, forecast = await fetch_weather(lat, lon)
+    
+    if weather is None or forecast is None:
+        return templates.TemplateResponse(
+            "result.html", {"request": request, "error": "Weather service temporarily unavailable"}
+        )
 
     if weather.get("cod") != 200 or forecast.get("cod") != "200":
-        error_msg = weather.get("message", "API Error")
+        error_msg = weather.get("message", "Weather API error")
         return templates.TemplateResponse(
             "result.html", {"request": request, "error": error_msg}
         )
 
-    location_display = location if location else f"{lat}, {lon}"
+    location_display = location if location else f"{lat:.4f}, {lon:.4f}"
 
     return templates.TemplateResponse(
         "result.html",
